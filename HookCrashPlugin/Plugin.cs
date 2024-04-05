@@ -4,42 +4,49 @@ using Dalamud.Plugin;
 using System.IO;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using SamplePlugin.Windows;
+using HookCrashPlugin.Windows;
 
-namespace SamplePlugin
+namespace HookCrashPlugin
 {
+    using System;
+    using Dalamud.Game;
+    using Dalamud.Hooking;
+    using HookCrashPlugin.Windows;
+
     public sealed class Plugin : IDalamudPlugin
     {
-        public string Name => "Sample Plugin";
-        private const string CommandName = "/pmycommand";
+        public string Name => "HookCrashPlugin";
+        private const string CommandName = "/testHookCrash";
 
         private DalamudPluginInterface PluginInterface { get; init; }
+        
         private ICommandManager CommandManager { get; init; }
-        public Configuration Configuration { get; init; }
-        public WindowSystem WindowSystem = new("SamplePlugin");
+        
+        internal IGameInteropProvider GameInteropProvider { get; init; }
+        public readonly WindowSystem WindowSystem = new("HookCrashPlugin");
 
-        private ConfigWindow ConfigWindow { get; init; }
         private MainWindow MainWindow { get; init; }
+        
+        
+        private nint MemoryAddress { get; set; }
 
         public Plugin(
             [RequiredVersion("1.0")] DalamudPluginInterface pluginInterface,
-            [RequiredVersion("1.0")] ICommandManager commandManager)
+            [RequiredVersion("1.0")] ICommandManager commandManager,
+            [RequiredVersion("1.0")] IGameInteropProvider gameInteropProvider,
+            [RequiredVersion("1.0")] ISigScanner sigScanner)
         {
             this.PluginInterface = pluginInterface;
             this.CommandManager = commandManager;
+            this.GameInteropProvider = gameInteropProvider;
 
-            this.Configuration = this.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
-            this.Configuration.Initialize(this.PluginInterface);
 
-            // you might normally want to embed resources and load them from the manifest stream
-            var imagePath = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName!, "goat.png");
-            var goatImage = this.PluginInterface.UiBuilder.LoadImage(imagePath);
-
-            ConfigWindow = new ConfigWindow(this);
-            MainWindow = new MainWindow(this, goatImage);
+            MainWindow = new MainWindow(this);
             
-            WindowSystem.AddWindow(ConfigWindow);
             WindowSystem.AddWindow(MainWindow);
+            
+            // address of HandleItemHover
+            this.MemoryAddress = sigScanner.ScanText("E8 ?? ?? ?? ?? 48 8B 5C 24 ?? 48 89 AE ?? ?? ?? ?? 48 89 AE ?? ?? ?? ??");
 
             this.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
@@ -47,14 +54,16 @@ namespace SamplePlugin
             });
 
             this.PluginInterface.UiBuilder.Draw += DrawUI;
-            this.PluginInterface.UiBuilder.OpenConfigUi += DrawConfigUI;
+            this.PluginInterface.UiBuilder.OpenMainUi += () => MainWindow.IsOpen ^= true;
+#if DEBUG
+            this.MainWindow.IsOpen = true;
+#endif
         }
 
         public void Dispose()
         {
             this.WindowSystem.RemoveAllWindows();
             
-            ConfigWindow.Dispose();
             MainWindow.Dispose();
             
             this.CommandManager.RemoveHandler(CommandName);
@@ -71,9 +80,9 @@ namespace SamplePlugin
             this.WindowSystem.Draw();
         }
 
-        public void DrawConfigUI()
+        internal IDisposable CreateHook()
         {
-            ConfigWindow.IsOpen = true;
+            return new HookClass(this.GameInteropProvider, this.MemoryAddress);
         }
     }
 }

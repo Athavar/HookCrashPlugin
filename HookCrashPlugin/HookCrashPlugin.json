@@ -1,0 +1,12 @@
+{
+  "Author": "Athavar",
+  "Name": "HookCrashPlugin",
+  "Punchline": "Plugin to recreate crash related to Hook's on linux",
+  "Description": "Plugin to recreate crash related to Hook's on linux.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "test",
+    "plugin",
+    "crash"
+  ]
+}
